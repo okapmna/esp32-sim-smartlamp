@@ -8,31 +8,31 @@
 #include <ArduinoOTA.h>
 #include "secret.h"
 
-// --- CONFIGURATION ---
-const char* current_version = "1.0.0";
+// CONFIG
+const char* current_version = "1.0.4";
 const char* device_type     = "esp32-smartlamp";
 const char* ota_server      = "otaup.okamna.my.id";
 
 const int LAMP1_PIN = 26;
 const int LAMP2_PIN = 27;
 
-// --- OTA DEBUG VARIABLES ---
+// OTA DEBUG VARIABLES
 bool updateAvailable = false;
 String pendingUpdateUrl = "";
 unsigned long lastCheckTime = 0;
 const unsigned long checkInterval = 60000; 
 
-// --- GLOBAL OBJECTS ---
+// GLOBAL OBJECTS   
 WiFiClientSecure espClient;
 PubSubClient client(espClient);
 Preferences pref;
 
-// --- SHARED VARIABLES ---
+// SHARED VARIABLES 
 String storage_ssid, storage_pass, storage_mqtt_host, storage_dev_id;
 int storage_mqtt_port;
 bool lamp1State = false, lamp2State = false;
 
-// --- FUNCTION PROTOTYPES (Optional in Arduino, but good for clarity) ---
+// FUNCTION PROTOTYPES 
 void setupWiFi();
 void setupOTA();
 void callback(char* topic, byte* payload, unsigned int length);
