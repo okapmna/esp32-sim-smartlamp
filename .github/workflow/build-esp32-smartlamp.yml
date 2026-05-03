@@ -1,0 +1,53 @@
+name: Build ESP32 .bin
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install arduino-cli
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh
+          echo "${PWD}/bin" >> $GITHUB_PATH
+
+      - name: Configure arduino-cli for ESP32
+        run: |
+          arduino-cli core update-index --additional-urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+          arduino-cli core install esp32:esp32 --additional-urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+
+      - name: Compile Sketch
+        run: |
+          mkdir -p build
+          # Make sure the file main.ino is in the root or adjust the path.
+          mkdir -p main
+          if [ -f main.ino ]; then
+            cp main.ino main/
+          fi
+          arduino-cli compile --fqbn esp32:esp32:esp32 --output-dir build serialread/serialread.ino
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: serialread-esp32-bin
+          path: build/*.bin
+
+      - name: Send .bin to API
+        env:
+          OTA_API_KEY: ${{ secrets.OTA_API_KEY }}
+        run: |
+          BIN_FILE=$(ls build/*.bin | head -n 1)
+          # Send to API with x-api-key header with auth.js
+          curl -X POST https://otaup.okamna.my.id/api/upload \
+               -F "firmware=@$BIN_FILE" \
+               -F "version=${{ github.sha }}" \
+               -F "device_type=esp32-smartlamp" \
+               -H "x-api-key: $OTA_API_KEY"
