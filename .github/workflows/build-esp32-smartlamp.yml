@@ -32,7 +32,7 @@ jobs:
           if [ -f main.ino ]; then
             cp main.ino main/
           fi
-          arduino-cli compile --fqbn esp32:esp32:esp32 --output-dir build serialread/serialread.ino
+          arduino-cli compile --fqbn esp32:esp32:esp32 --output-dir build main/main.ino
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
@@ -45,9 +45,11 @@ jobs:
           OTA_API_KEY: ${{ secrets.OTA_API_KEY }}
         run: |
           BIN_FILE=$(ls build/*.bin | head -n 1)
-          # Send to API with x-api-key header with auth.js
+          # Ambil versi dari main.ino secara otomatis
+          VERSION=$(grep "current_version =" main.ino | cut -d '"' -f 2)
+          
           curl -X POST https://otaup.okamna.my.id/api/upload \
                -F "firmware=@$BIN_FILE" \
-               -F "version=${{ github.sha }}" \
+               -F "version=$VERSION" \
                -F "device_type=esp32-smartlamp" \
                -H "x-api-key: $OTA_API_KEY"
