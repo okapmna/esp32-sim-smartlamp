@@ -32,12 +32,19 @@ jobs:
       - name: Compile Sketch
         run: |
           mkdir -p build
-          # Make sure the file main.ino is in the root or adjust the path.
           mkdir -p main
-          if [ -f main.ino ]; then
-            cp main.ino main/
+          
+          # Copy semua file .ino ke folder main
+          cp *.ino main/
+          
+          # Cek secret.h, jika tidak ada gunakan example
+          if [ -f secret.h ]; then
+            cp secret.h main/
+          else
+            cp secret.h.example main/secret.h
           fi
-          arduino-cli compile --fqbn esp32:esp32:esp32 --output-dir build main/main.ino
+          
+          arduino-cli compile --fqbn esp32:esp32:esp32 --output-dir build main/
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
