@@ -9,7 +9,7 @@
 #include "secret.h"
 
 // CONFIG
-const char* current_version = "1.0.4";
+const char* current_version = "1.0.5";
 const char* device_type     = "esp32-smartlamp";
 const char* ota_server      = "otaup.okamna.my.id";
 
