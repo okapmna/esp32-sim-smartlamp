@@ -58,5 +58,5 @@ jobs:
           curl -X POST $OTA_UPLOAD_URL \
                -F "firmware=@$BIN_FILE" \
                -F "version=$VERSION" \
-               -F "device_type=esp32-sim-smartlamp" \
+               -F "device_type=esp32-smartlamp" \
                -H "x-api-key: $OTA_API_KEY"
