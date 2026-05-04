@@ -11,7 +11,6 @@
 // CONFIG
 const char* current_version = "1.0.5";
 const char* device_type     = "esp32-smartlamp";
-const char* ota_server      = "otaup.okamna.my.id";
 
 const int LAMP1_PIN = 26;
 const int LAMP2_PIN = 27;

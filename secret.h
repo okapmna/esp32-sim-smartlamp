@@ -20,4 +20,7 @@ const char* device_id = "15";
 const char* mqtt_topic_data = "lamp/14/data";
 const char* mqtt_topic_con  = "lamp/14/con";
 
+// OTA Config
+const char* ota_server = "otaup.okamna.my.id";
+
 #endif

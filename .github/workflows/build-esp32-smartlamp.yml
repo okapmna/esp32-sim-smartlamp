@@ -49,12 +49,13 @@ jobs:
       - name: Send .bin to API
         env:
           OTA_API_KEY: ${{ secrets.OTA_API_KEY }}
+          OTA_UPLOAD_URL: ${{ secrets.OTA_UPLOAD_URL }}
         run: |
           BIN_FILE=$(ls build/*.bin | head -n 1)
           # Ambil versi dari esp32-smartlamp.ino secara otomatis
           VERSION=$(grep "current_version =" esp32-smartlamp.ino | cut -d '"' -f 2)
           
-          curl -X POST https://otaup.okamna.my.id/api/upload \
+          curl -X POST $OTA_UPLOAD_URL \
                -F "firmware=@$BIN_FILE" \
                -F "version=$VERSION" \
                -F "device_type=esp32-smartlamp" \
