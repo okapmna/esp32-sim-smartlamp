@@ -32,19 +32,13 @@ jobs:
       - name: Compile Sketch
         run: |
           mkdir -p build
-          mkdir -p main
-          
-          # Copy semua file .ino ke folder main
-          cp *.ino main/
           
           # Cek secret.h, jika tidak ada gunakan example
-          if [ -f secret.h ]; then
-            cp secret.h main/
-          else
-            cp secret.h.example main/secret.h
+          if [ ! -f secret.h ]; then
+            cp secret.h.example secret.h
           fi
           
-          arduino-cli compile --fqbn esp32:esp32:esp32 --output-dir build main/
+          arduino-cli compile --fqbn esp32:esp32:esp32 --output-dir build ./
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
@@ -57,8 +51,8 @@ jobs:
           OTA_API_KEY: ${{ secrets.OTA_API_KEY }}
         run: |
           BIN_FILE=$(ls build/*.bin | head -n 1)
-          # Ambil versi dari main.ino secara otomatis
-          VERSION=$(grep "current_version =" main.ino | cut -d '"' -f 2)
+          # Ambil versi dari esp32-smartlamp.ino secara otomatis
+          VERSION=$(grep "current_version =" esp32-smartlamp.ino | cut -d '"' -f 2)
           
           curl -X POST https://otaup.okamna.my.id/api/upload \
                -F "firmware=@$BIN_FILE" \
