@@ -1,7 +1,7 @@
 void checkOTAUpdate() {
   Serial.println("\n[OTA] Memeriksa versi terbaru ke server...");
   
-  String serverUrl = "https://" + String(ota_server) + "/api/ota/check?version=" + String(current_version) + "&device=" + String(device_type);
+  String serverUrl = "https://" + storage_ota_server + "/api/ota/check?version=" + String(current_version) + "&device=" + String(device_type);
 
   WiFiClientSecure otaClient;
   otaClient.setInsecure();
@@ -17,7 +17,8 @@ void checkOTAUpdate() {
 
     if (doc["status"] == "update_available") {
       updateAvailable = true;
-      pendingUpdateUrl = "https://" + String(ota_server) + "/api" + doc["url"].as<String>();
+      pendingUpdateUrl = "https://" + storage_ota_server + "/api" + doc["url"].as<String>();
+      latest_version = doc["version"].as<String>();
       
       Serial.println("*************************************************");
       Serial.print("UPDATE TERSEDIA: "); Serial.println(doc["version"].as<String>());
@@ -52,7 +53,7 @@ void executeOTAUpdate() {
       updateAvailable = false; 
       break;
     case HTTP_UPDATE_NO_UPDATES:
-      Serial.println("\n[OTA] Tidak ada file update.");
+      Serial.println("\n[OTA] Tidak ada update.");
       break;
     case HTTP_UPDATE_OK:
       Serial.println("\n[OTA] Update Berhasil! Rebooting...");
