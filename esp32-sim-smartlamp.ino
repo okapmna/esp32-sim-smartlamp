@@ -10,7 +10,7 @@
 #include "secret.h"
 
 // CONFIG
-const char* current_version = "1.0.5";
+const char* current_version = "2.0.0";
 const char* device_type     = "esp32-smartlamp";
 
 const int LAMP1_PIN = 2;
