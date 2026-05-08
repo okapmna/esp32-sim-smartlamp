@@ -10,7 +10,7 @@
 #include "secret.h"
 
 // CONFIG
-const char* current_version = "2.0.1";
+const char* current_version = "2.0.3";
 const char* device_type     = "esp32-smartlamp";
 
 const int LAMP1_PIN = 2;
@@ -46,12 +46,13 @@ void setup() {
 
   pref.begin("config", false);
 
-  esp_reset_reason_t resetReason = esp_reset_reason();
-  bool isOtaReboot = (resetReason == ESP_RST_SW);
+  String stored_ssid = pref.getString("ssid", "");
 
-  if (!isOtaReboot) {
-    // Flash via kabel USB atau power on: tulis ulang kredensial dari secret.h
-    Serial.println("[CONFIG] Flash via kabel / power on terdeteksi. Reset kredensial dari secret.h");
+  // Deteksi apakah kita perlu menyimpan/menimpa kredensial di memori:
+  // 1. Jika memori masih kosong (fresh install).
+  // 2. ATAU jika secret.h berisi SSID yang valid (bukan dummy/default dari sistem OTA).
+  if (stored_ssid == "" || (String(ssid) != "YOUR_WIFI_SSID" && String(ssid) != "")) {
+    Serial.println("[CONFIG] Fresh install atau kredensial baru terdeteksi. Menyimpan kredensial dari secret.h ke memori.");
     pref.putString("ssid", ssid);
     pref.putString("pass", password);
     pref.putString("mqtt_host", mqtt_server);
@@ -59,8 +60,8 @@ void setup() {
     pref.putString("dev_id", device_id);
     pref.putString("ota_srv", ota_server);
   } else {
-    // Reboot dari OTA: kredensial aman
-    Serial.println("[CONFIG] Reboot dari OTA terdeteksi. Kredensial aman disimoan di memori.");
+    // Jika reboot biasa (power on) atau OTA dengan dummy secret.h, gunakan kredensial dari memori
+    Serial.println("[CONFIG] Menggunakan kredensial yang tersimpan di memori (NVS).");
   }
 
   storage_ssid = pref.getString("ssid");
@@ -112,8 +113,5 @@ void loop() {
         Serial.println("[DEBUG] Tidak ada update. Ketik 'check' dulu.");
       }
     }
-  }
-
-
-  
+  } 
 }
