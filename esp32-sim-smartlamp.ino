@@ -10,7 +10,7 @@
 #include "secret.h"
 
 // CONFIG
-const char* current_version = "2.0.0";
+const char* current_version = "2.0.1";
 const char* device_type     = "esp32-smartlamp";
 
 const int LAMP1_PIN = 2;
@@ -20,8 +20,6 @@ const int LAMP2_PIN = 27;
 bool updateAvailable = false;
 String pendingUpdateUrl = "";
 String latest_version = "";
-unsigned long lastCheckTime = 0;
-const unsigned long checkInterval = 300000; // 5 menit
 
 // GLOBAL OBJECTS   
 WiFiClientSecure espClient;
@@ -61,8 +59,8 @@ void setup() {
     pref.putString("dev_id", device_id);
     pref.putString("ota_srv", ota_server);
   } else {
-    // Reboot dari OTA: pertahankan kredensial yang sudah ada di memori
-    Serial.println("[CONFIG] Reboot dari OTA terdeteksi. Kredensial dipertahankan.");
+    // Reboot dari OTA: kredensial aman
+    Serial.println("[CONFIG] Reboot dari OTA terdeteksi. Kredensial aman disimoan di memori.");
   }
 
   storage_ssid = pref.getString("ssid");
@@ -99,10 +97,6 @@ void loop() {
   if (!client.connected()) reconnect();
   client.loop();
 
-  if (millis() - lastCheckTime > checkInterval) {
-    lastCheckTime = millis();
-    checkOTAUpdate();
-  }
 
   if (Serial.available() > 0) {
     String input = Serial.readStringUntil('\n');
@@ -119,4 +113,7 @@ void loop() {
       }
     }
   }
+
+
+  
 }

@@ -1,7 +1,7 @@
 void callback(char* topic, byte* payload, unsigned int length) {
   String message = "";
   for (int i = 0; i < length; i++) message += (char)payload[i];
-  message.trim(); // Membersihkan spasi atau newline
+  message.trim(); // Clean space & newline
 
   Serial.print("[MQTT] Pesan masuk di topik [");
   Serial.print(topic);
@@ -23,7 +23,6 @@ void callback(char* topic, byte* payload, unsigned int length) {
     } else {
       payloadStr = "{\"update\":false}";
     }
-
     Serial.print("[MQTT] Mengirim balasan ke ");
     Serial.println(topicData);
     if (client.publish(topicData.c_str(), payloadStr.c_str())) {
