@@ -5,6 +5,8 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
+  release:
+    types: [published]
   workflow_dispatch:
 
 jobs:
@@ -46,7 +48,8 @@ jobs:
           name: serialread-esp32-bin
           path: build/*.bin
 
-      - name: Send .bin to API
+      - name: Send .bin to OTA API (Release only)
+        if: github.event_name == 'release'
         env:
           OTA_API_KEY: ${{ secrets.OTA_API_KEY }}
           OTA_UPLOAD_URL: ${{ secrets.OTA_UPLOAD_URL }}

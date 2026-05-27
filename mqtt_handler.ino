@@ -23,6 +23,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
     } else {
       payloadStr = "{\"update\":false}";
     }
+
     Serial.print("[MQTT] Mengirim balasan ke ");
     Serial.println(topicData);
     if (client.publish(topicData.c_str(), payloadStr.c_str())) {
@@ -54,7 +55,7 @@ void reconnect() {
   if (client.connected()) return;
 
   unsigned long now = millis();
-  // Coba reconnect setiap 3 detik (non-blocking)
+  // Reconnect every 3 seconds non-blocking
   if (now - lastReconnectAttempt < 3000) return;
   lastReconnectAttempt = now;
 
