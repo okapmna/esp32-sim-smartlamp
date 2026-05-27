@@ -31,6 +31,17 @@ jobs:
           arduino-cli lib install "PubSubClient"
           arduino-cli lib install "ArduinoJson"
 
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            VERSION="${{ github.event.release.tag_name }}"
+            VERSION="${VERSION#v}"
+          else
+            VERSION="dev-${GITHUB_SHA::7}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Compile Sketch
         run: |
           mkdir -p build
@@ -40,7 +51,8 @@ jobs:
             cp secret.h.example secret.h
           fi
           
-          arduino-cli compile --fqbn esp32:esp32:esp32 --output-dir build ./
+          arduino-cli compile --fqbn esp32:esp32:esp32 --output-dir build ./ \
+            --build-property "build.extra_flags=-DCURRENT_VERSION=\"${{ steps.version.outputs.version }}\""
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
@@ -55,11 +67,9 @@ jobs:
           OTA_UPLOAD_URL: ${{ secrets.OTA_UPLOAD_URL }}
         run: |
           BIN_FILE=$(ls build/*.bin | head -n 1)
-          # Ambil versi dari esp32-sim-smartlamp.ino secara otomatis
-          VERSION=$(grep "current_version =" esp32-sim-smartlamp.ino | cut -d '"' -f 2)
           
           curl -X POST $OTA_UPLOAD_URL \
                -F "firmware=@$BIN_FILE" \
-               -F "version=$VERSION" \
+               -F "version=${{ steps.version.outputs.version }}" \
                -F "device_type=esp32-smartlamp" \
                -H "x-api-key: $OTA_API_KEY"
