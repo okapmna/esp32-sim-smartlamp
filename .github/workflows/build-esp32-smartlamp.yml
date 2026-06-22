@@ -1,6 +1,13 @@
-name: Build ESP32 .bin
+name: Build & Deploy ESP32 Firmware
 
 on:
+  push:
+    branches: [main, master]
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
+  pull_request:
+    branches: [main, master]
   release:
     types: [published]
   workflow_dispatch:
@@ -9,23 +16,30 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Install arduino-cli
-        run: |
-          curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh
-          echo "${PWD}/bin" >> $GITHUB_PATH
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-      - name: Configure arduino-cli for ESP32
-        run: |
-          arduino-cli core update-index --additional-urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
-          arduino-cli core install esp32:esp32 --additional-urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+      - name: Install PlatformIO
+        run: pip install --no-cache-dir platformio
 
-      - name: Install Libraries
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio/.cache
+            ~/.platformio/packages
+            ~/.platformio/platforms
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+
+      - name: Prepare secret.h
         run: |
-          arduino-cli lib install "PubSubClient"
-          arduino-cli lib install "ArduinoJson"
+          if [ ! -f include/secret.h ]; then
+            cp secret.h.example include/secret.h
+          fi
 
       - name: Determine version
         id: version
@@ -38,34 +52,39 @@ jobs:
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Compile Sketch
-        run: |
-          mkdir -p build
-          
-          # Cek secret.h, jika tidak ada gunakan example
-          if [ ! -f secret.h ]; then
-            cp secret.h.example secret.h
-          fi
-          
-          arduino-cli compile --fqbn esp32:esp32:esp32 --output-dir build ./ \
-            --build-property "build.extra_flags=-DCURRENT_VERSION=\"${{ steps.version.outputs.version }}\""
+      - name: Build firmware (validation)
+        if: github.event_name != 'release'
+        run: platformio run -e esp32dev
 
-      - name: Upload Build Artifacts
+      - name: Build firmware (release)
+        if: github.event_name == 'release'
+        run: platformio run -e esp32dev --build-flags "-DCURRENT_VERSION=\"${{ steps.version.outputs.version }}\""
+
+      - name: Package firmware
+        run: |
+          mkdir -p dist
+          cp .pio/build/esp32dev/firmware.bin "dist/smartlamp-${{ steps.version.outputs.version }}.bin"
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: serialread-esp32-bin
-          path: build/*.bin
+          name: smartlamp-firmware-${{ steps.version.outputs.version }}
+          path: dist/*.bin
+          if-no-files-found: error
 
-      - name: Send .bin to OTA API (Release only)
+      - name: Deploy to OTA server (release only)
         if: github.event_name == 'release'
         env:
           OTA_API_KEY: ${{ secrets.OTA_API_KEY }}
           OTA_UPLOAD_URL: ${{ secrets.OTA_UPLOAD_URL }}
         run: |
-          BIN_FILE=$(ls build/*.bin | head -n 1)
-          
-          curl -X POST $OTA_UPLOAD_URL \
-               -F "firmware=@$BIN_FILE" \
+          FIRMWARE="dist/smartlamp-${{ steps.version.outputs.version }}.bin"
+          if [ -z "$OTA_UPLOAD_URL" ] || [ -z "$OTA_API_KEY" ]; then
+            echo "::warning::OTA_UPLOAD_URL or OTA_API_KEY not set, skipping"
+            exit 0
+          fi
+          curl -fsS -X POST "$OTA_UPLOAD_URL" \
+               -F "firmware=@$FIRMWARE" \
                -F "version=${{ steps.version.outputs.version }}" \
                -F "device_type=esp32-smartlamp" \
                -H "x-api-key: $OTA_API_KEY"

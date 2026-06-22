@@ -1,13 +1,15 @@
+#include "globals.h"
+
 void callback(char* topic, byte* payload, unsigned int length) {
   String message = "";
   for (int i = 0; i < length; i++) message += (char)payload[i];
-  message.trim(); // Clean space & newline
+  message.trim();
 
   Serial.print("[MQTT] Pesan masuk di topik [");
   Serial.print(topic);
   Serial.print("]: ");
   Serial.println(message);
-  
+
   if (message == "1ON") lamp1State = true;
   else if (message == "1OFF") lamp1State = false;
   else if (message == "2ON") lamp2State = true;
@@ -17,7 +19,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
     checkOTAUpdate();
     String topicData = "lamp/" + storage_dev_id + "/data";
     String payloadStr;
-    
+
     if (updateAvailable) {
       payloadStr = "{\"update\":true,\"version_new\":\"" + latest_version + "\",\"version_current\":\"" + String(current_version) + "\"}";
     } else {
@@ -55,7 +57,6 @@ void reconnect() {
   if (client.connected()) return;
 
   unsigned long now = millis();
-  // Reconnect every 3 seconds non-blocking
   if (now - lastReconnectAttempt < 3000) return;
   lastReconnectAttempt = now;
 

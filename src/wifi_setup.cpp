@@ -1,3 +1,5 @@
+#include "globals.h"
+
 void setupWiFi() {
   Serial.printf("\nConnecting WiFi: %s\n", storage_ssid.c_str());
   WiFi.begin(storage_ssid.c_str(), storage_pass.c_str());
