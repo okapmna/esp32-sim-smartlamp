@@ -12,6 +12,7 @@ const int LAMP2_PIN = 27;
 
 bool updateAvailable = false;
 String pendingUpdateUrl = "";
+String pendingUpdateChecksum = "";
 String latest_version = "";
 
 WiFiClientSecure espClient;

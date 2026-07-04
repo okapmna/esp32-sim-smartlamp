@@ -65,26 +65,45 @@ jobs:
           mkdir -p dist
           cp .pio/build/esp32dev/firmware.bin "dist/smartlamp-${{ steps.version.outputs.version }}.bin"
 
+      - name: Generate SHA-256 checksum
+        run: |
+          sha256sum "dist/smartlamp-${{ steps.version.outputs.version }}.bin" | cut -d' ' -f1 > "dist/smartlamp-${{ steps.version.outputs.version }}.bin.sha256"
+          echo "Checksum: $(cat dist/smartlamp-${{ steps.version.outputs.version }}.bin.sha256)"
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: smartlamp-firmware-${{ steps.version.outputs.version }}
-          path: dist/*.bin
+          path: dist/*
           if-no-files-found: error
+
+      - name: Upload to GitHub Release (release only)
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" dist/* --clobber
 
       - name: Deploy to OTA server (release only)
         if: github.event_name == 'release'
         env:
           OTA_API_KEY: ${{ secrets.OTA_API_KEY }}
           OTA_UPLOAD_URL: ${{ secrets.OTA_UPLOAD_URL }}
+          UPLOADED_BY: ${{ github.actor }}
+          SOURCE_REPO: ${{ github.server_url }}/${{ github.repository }}
         run: |
           FIRMWARE="dist/smartlamp-${{ steps.version.outputs.version }}.bin"
+          CHECKSUM_FILE="dist/smartlamp-${{ steps.version.outputs.version }}.bin.sha256"
           if [ -z "$OTA_UPLOAD_URL" ] || [ -z "$OTA_API_KEY" ]; then
             echo "::warning::OTA_UPLOAD_URL or OTA_API_KEY not set, skipping"
             exit 0
           fi
+          CHECKSUM=$(cat "$CHECKSUM_FILE")
           curl -fsS -X POST "$OTA_UPLOAD_URL" \
                -F "firmware=@$FIRMWARE" \
                -F "version=${{ steps.version.outputs.version }}" \
                -F "device_type=esp32-smartlamp" \
+               -F "checksum=$CHECKSUM" \
+               -F "uploaded_by=$UPLOADED_BY" \
+               -F "source_repo=$SOURCE_REPO" \
                -H "x-api-key: $OTA_API_KEY"

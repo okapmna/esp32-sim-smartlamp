@@ -4,7 +4,6 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
-#include <HTTPUpdate.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include <Preferences.h>
@@ -19,6 +18,7 @@ extern const int LAMP2_PIN;
 
 extern bool updateAvailable;
 extern String pendingUpdateUrl;
+extern String pendingUpdateChecksum;
 extern String latest_version;
 
 extern WiFiClientSecure espClient;
