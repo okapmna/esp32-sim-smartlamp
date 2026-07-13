@@ -103,7 +103,7 @@ jobs:
             exit 0
           fi
           CHECKSUM=$(cat "$CHECKSUM_FILE")
-          curl -fsS -X POST "$OTA_UPLOAD_URL" \
+          curl -fsSv -X POST "$OTA_UPLOAD_URL" \
                -F "firmware=@$FIRMWARE" \
                -F "version=${{ steps.version.outputs.version }}" \
                -F "device_type=esp32-smartlamp" \
