@@ -58,7 +58,9 @@ jobs:
 
       - name: Build firmware (release)
         if: github.event_name == 'release'
-        run: platformio run -e esp32dev --build-flags "-DCURRENT_VERSION=\"${{ steps.version.outputs.version }}\""
+        env:
+          PLATFORMIO_BUILD_FLAGS: -DCURRENT_VERSION=\"${{ steps.version.outputs.version }}\"
+        run: platformio run -e esp32dev
 
       - name: Package firmware
         run: |
