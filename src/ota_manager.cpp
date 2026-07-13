@@ -2,6 +2,9 @@
 #include <Update.h>
 #include <mbedtls/sha256.h>
 
+// ---------------------------------------------------------------------------
+// Helper: byte array → lowercase hex string
+// ---------------------------------------------------------------------------
 static String bytesToHex(const uint8_t* data, size_t len) {
   String hex = "";
   for (size_t i = 0; i < len; i++) {
@@ -11,143 +14,191 @@ static String bytesToHex(const uint8_t* data, size_t len) {
   return hex;
 }
 
+// ---------------------------------------------------------------------------
+// Validasi format hex SHA-256 (64 karakter, semua hex digit)
+// ---------------------------------------------------------------------------
+static bool isValidSHA256Hex(const String& s) {
+  if (s.length() != 64) return false;
+  for (size_t i = 0; i < s.length(); i++) {
+    if (!isxdigit((unsigned char)s[i])) return false;
+  }
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// checkOTAUpdate()
+//   GET /api/ota/check?version=<ver>&device=<type>
+//   Response: {"status":"update_available","version":"2.0.0",
+//              "url":"/api/ota/download/firmware-esp32-v2.0.0.bin",
+//              "checksum":"a1b2c3..."}
+// ---------------------------------------------------------------------------
 void checkOTAUpdate() {
   Serial.println("\n[OTA] Memeriksa versi terbaru ke server...");
 
-  String serverUrl = "https://" + storage_ota_server + "/api/ota/check?version=" + String(current_version) + "&device=" + String(device_type);
+  String serverUrl = "https://" + storage_ota_server
+                   + "/api/ota/check?version=" + String(current_version)
+                   + "&device=" + String(device_type);
 
   WiFiClientSecure otaClient;
   otaClient.setInsecure();
 
   HTTPClient http;
   http.begin(otaClient, serverUrl);
+  http.setTimeout(10000);
   int httpCode = http.GET();
 
   if (httpCode == HTTP_CODE_OK) {
     String payload = http.getString();
+    Serial.print("[OTA] Response: "); Serial.println(payload);
+
     JsonDocument doc;
-    deserializeJson(doc, payload);
+    DeserializationError err = deserializeJson(doc, payload);
+
+    if (err) {
+      Serial.print("[OTA] JSON parse error: "); Serial.println(err.c_str());
+      http.end();
+      return;
+    }
 
     if (doc["status"] == "update_available") {
-      updateAvailable = true;
-      pendingUpdateUrl = "https://" + storage_ota_server + "/api" + doc["url"].as<String>();
+      // URL dari server sudah "/api/ota/download/...", prefix HANYA "https://<host>"
+      // Tidak perlu tambah "/api" lagi agar tidak menjadi "/api/api/..."
+      String relativeUrl = doc["url"].as<String>();
+      pendingUpdateUrl      = "https://" + storage_ota_server + relativeUrl;
       pendingUpdateChecksum = doc["checksum"].as<String>();
-      latest_version = doc["version"].as<String>();
+      latest_version        = doc["version"].as<String>();
+
+      updateAvailable = true;
 
       Serial.println("*************************************************");
-      Serial.print("UPDATE TERSEDIA: "); Serial.println(doc["version"].as<String>());
-      Serial.print("Checksum SHA-256: "); Serial.println(pendingUpdateChecksum);
+      Serial.print("UPDATE TERSEDIA  : "); Serial.println(latest_version);
+      Serial.print("Download URL     : "); Serial.println(pendingUpdateUrl);
+      Serial.print("Checksum SHA-256 : "); Serial.println(pendingUpdateChecksum);
       Serial.println("Ketik 'update' di Serial Monitor untuk mengunduh.");
       Serial.println("*************************************************");
-    } else {
+
+      if (!isValidSHA256Hex(pendingUpdateChecksum)) {
+        Serial.println("[OTA] PERINGATAN: Checksum dari server tidak valid (bukan 64-char hex)!");
+        Serial.println("[OTA] Update tidak akan dilanjutkan sampai checksum valid.");
+        updateAvailable = false;
+      }
+
+    } else if (doc["status"] == "up_to_date") {
       updateAvailable = false;
       Serial.println("[OTA] Firmware sudah versi terbaru.");
+    } else {
+      updateAvailable = false;
+      Serial.print("[OTA] Status tidak dikenal: ");
+      Serial.println(doc["status"].as<String>());
     }
+
   } else {
-    Serial.printf("[OTA] Gagal konek ke server. Kode: %d\n", httpCode);
+    Serial.printf("[OTA] Gagal konek ke server. HTTP code: %d\n", httpCode);
+    if (httpCode > 0) {
+      Serial.print("[OTA] Body: "); Serial.println(http.getString());
+    }
   }
   http.end();
 }
 
+// ---------------------------------------------------------------------------
+// executeOTAUpdate()
+//   Download firmware via HTTPClient (streaming) + verifikasi SHA-256
+// ---------------------------------------------------------------------------
 void executeOTAUpdate() {
   if (!updateAvailable || pendingUpdateUrl.isEmpty()) {
     Serial.println("[OTA] Tidak ada update yang tersedia. Jalankan 'check' dulu.");
     return;
   }
 
-  if (pendingUpdateChecksum.isEmpty()) {
-    Serial.println("[OTA] Error: Tidak ada checksum dari server. Update dibatalkan.");
+  if (!isValidSHA256Hex(pendingUpdateChecksum)) {
+    Serial.println("[OTA] Error: Checksum tidak valid. Update dibatalkan.");
     return;
   }
 
   Serial.println("\n[OTA] Memulai download & update dengan verifikasi SHA-256...");
   Serial.print("[OTA] URL: "); Serial.println(pendingUpdateUrl);
 
-  WiFiClientSecure client;
-  client.setInsecure();
+  WiFiClientSecure dlClient;
+  dlClient.setInsecure();
 
-  if (!client.connect(storage_ota_server.c_str(), 443)) {
-    Serial.println("[OTA] Gagal konek ke server OTA.");
+  HTTPClient http;
+  http.begin(dlClient, pendingUpdateUrl);
+  http.setTimeout(30000);
+
+  int httpCode = http.GET();
+  if (httpCode != HTTP_CODE_OK) {
+    Serial.printf("[OTA] Gagal download firmware. HTTP code: %d\n", httpCode);
+    http.end();
     return;
   }
 
-  String path = pendingUpdateUrl.substring(pendingUpdateUrl.indexOf('/', 8));
-  if (path.isEmpty()) path = "/";
+  int contentLength = http.getSize();  // -1 jika chunked / tidak ada header
+  Serial.printf("[OTA] Content-Length: %d bytes\n", contentLength);
 
-  client.print("GET " + path + " HTTP/1.1\r\n");
-  client.print("Host: " + storage_ota_server + "\r\n");
-  client.print("Connection: close\r\n");
-  client.print("\r\n");
-
-  unsigned long timeout = millis();
-  while (client.available() == 0) {
-    if (millis() - timeout > 10000) {
-      Serial.println("[OTA] Timeout saat menunggu response dari server.");
-      client.stop();
-      return;
-    }
-  }
-
-  String headerLine;
-  int contentLength = -1;
-  bool httpStatusOk = false;
-
-  while (client.connected()) {
-    headerLine = client.readStringUntil('\n');
-    headerLine.trim();
-    if (headerLine.isEmpty()) break;
-
-    if (headerLine.startsWith("HTTP/1.")) {
-      httpStatusOk = headerLine.indexOf("200") >= 0;
-    } else if (headerLine.startsWith("Content-Length:") || headerLine.startsWith("content-length:")) {
-      contentLength = headerLine.substring(headerLine.indexOf(':') + 1).toInt();
-    }
-  }
-
-  if (!httpStatusOk || contentLength <= 0) {
-    Serial.printf("[OTA] Response server tidak valid. Content-Length: %d\n", contentLength);
-    client.stop();
+  if (contentLength == 0) {
+    Serial.println("[OTA] Content-Length = 0. Update dibatalkan.");
+    http.end();
     return;
   }
 
-  if (!Update.begin(contentLength)) {
-    Serial.printf("[OTA] Gagal memulai OTA. Ukuran: %d, Error: %s\n", contentLength, Update.errorString());
-    client.stop();
+  if (!Update.begin(contentLength > 0 ? (size_t)contentLength : UPDATE_SIZE_UNKNOWN)) {
+    Serial.printf("[OTA] Gagal memulai OTA: %s\n", Update.errorString());
+    http.end();
     return;
   }
 
+  // Inisialisasi SHA-256
   mbedtls_sha256_context sha;
   mbedtls_sha256_init(&sha);
-  mbedtls_sha256_starts(&sha, 0);
+  mbedtls_sha256_starts(&sha, 0);  // 0 = SHA-256 (bukan SHA-224)
 
-  uint8_t buffer[1024];
-  int bytesRead = 0;
+  WiFiClient* stream   = http.getStreamPtr();
+  uint8_t     buffer[1024];
+  int         totalWritten = 0;
   unsigned long lastReport = 0;
 
-  Serial.printf("[OTA] Mendownload %d bytes...\n", contentLength);
+  Serial.println("[OTA] Streaming firmware ke flash...");
 
-  while (bytesRead < contentLength && client.connected()) {
-    int len = client.read(buffer, sizeof(buffer));
-    if (len <= 0) continue;
+  while (http.connected() && (contentLength < 0 || totalWritten < contentLength)) {
+    int available = stream->available();
+    if (available == 0) {
+      delay(1);
+      continue;
+    }
 
-    if (Update.write(buffer, len) != len) {
-      Serial.printf("[OTA] Gagal menulis ke flash. Error: %s\n", Update.errorString());
-      break;
+    int toRead = available < (int)sizeof(buffer) ? available : (int)sizeof(buffer);
+    int len    = stream->readBytes(buffer, toRead);
+    if (len <= 0) break;
+
+    size_t written = Update.write(buffer, len);
+    if (written != (size_t)len) {
+      Serial.printf("[OTA] Gagal tulis ke flash: %s\n", Update.errorString());
+      Update.abort();
+      mbedtls_sha256_free(&sha);
+      http.end();
+      return;
     }
 
     mbedtls_sha256_update(&sha, buffer, len);
-    bytesRead += len;
+    totalWritten += len;
 
     unsigned long now = millis();
     if (now - lastReport > 2000) {
-      int pct = (bytesRead * 100) / contentLength;
-      Serial.printf("[OTA] Progress: %d%% (%d/%d bytes)\r", pct, bytesRead, contentLength);
+      if (contentLength > 0) {
+        int pct = (totalWritten * 100) / contentLength;
+        Serial.printf("[OTA] Progress: %d%% (%d/%d bytes)\n", pct, totalWritten, contentLength);
+      } else {
+        Serial.printf("[OTA] Diunduh: %d bytes\n", totalWritten);
+      }
       lastReport = now;
     }
   }
 
-  Serial.printf("\n[OTA] Download selesai: %d bytes diterima.\n", bytesRead);
+  http.end();
+  Serial.printf("[OTA] Download selesai: %d bytes diterima.\n", totalWritten);
 
+  // Finalisasi SHA-256
   uint8_t hash[32];
   mbedtls_sha256_finish(&sha, hash);
   mbedtls_sha256_free(&sha);
@@ -157,29 +208,44 @@ void executeOTAUpdate() {
   String expectedChecksum = pendingUpdateChecksum;
   expectedChecksum.toLowerCase();
 
-  Serial.print("[OTA] SHA-256 computed: "); Serial.println(computedChecksum);
-  Serial.print("[OTA] SHA-256 expected: "); Serial.println(expectedChecksum);
+  Serial.print("[OTA] SHA-256 computed : "); Serial.println(computedChecksum);
+  Serial.print("[OTA] SHA-256 expected : "); Serial.println(expectedChecksum);
 
   if (computedChecksum != expectedChecksum) {
-    Serial.println("[OTA] Checksum MISMATCH! Update dibatalkan.");
+    Serial.println("[OTA] *** Checksum MISMATCH! Update dibatalkan. ***");
     Update.abort();
-    updateAvailable = false;
-    pendingUpdateUrl = "";
+    updateAvailable       = false;
+    pendingUpdateUrl      = "";
     pendingUpdateChecksum = "";
-    client.stop();
+
+    // Beritahu backend via MQTT bahwa OTA gagal
+    String topicData   = "lamp/" + storage_dev_id + "/data";
+    String failPayload = "{\"event\":\"ota_failed\",\"reason\":\"checksum_mismatch\","
+                         "\"version\":\"" + latest_version + "\"}";
+    client.publish(topicData.c_str(), failPayload.c_str());
     return;
   }
 
-  Serial.println("[OTA] Checksum valid!");
+  Serial.println("[OTA] Checksum valid! Memfinalisasi...");
 
   if (!Update.end(true)) {
-    Serial.printf("[OTA] Gagal finalisasi update. Error: %s\n", Update.errorString());
-    client.stop();
+    Serial.printf("[OTA] Gagal finalisasi update: %s\n", Update.errorString());
+
+    // Beritahu backend via MQTT
+    String topicData   = "lamp/" + storage_dev_id + "/data";
+    String failPayload = "{\"event\":\"ota_failed\",\"reason\":\"finalize_error\","
+                         "\"version\":\"" + latest_version + "\"}";
+    client.publish(topicData.c_str(), failPayload.c_str());
     return;
   }
 
-  Serial.println("[OTA] Update BERHASIL! Rebooting dalam 3 detik...");
-  client.stop();
+  // Beritahu backend bahwa OTA berhasil SEBELUM restart
+  String topicData = "lamp/" + storage_dev_id + "/data";
+  String okPayload = "{\"event\":\"ota_success\",\"version\":\"" + latest_version + "\"}";
+  client.publish(topicData.c_str(), okPayload.c_str());
+  client.loop();  // flush publish buffer
+
+  Serial.println("[OTA] *** Update BERHASIL! Rebooting dalam 3 detik... ***");
   delay(3000);
   ESP.restart();
 }
