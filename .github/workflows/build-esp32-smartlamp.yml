@@ -104,7 +104,7 @@ jobs:
             exit 0
           fi
           CHECKSUM=$(cat "$CHECKSUM_FILE")
-          curl -fsSv -X POST "${OTA_UPLOAD_URL}?device_type=${DEVICE_TYPE}" \
+          curl -fsS -X POST "${OTA_UPLOAD_URL}?device_type=${DEVICE_TYPE}" \
                -F "firmware=@$FIRMWARE" \
                -F "version=${{ steps.version.outputs.version }}" \
                -F "device_type=${DEVICE_TYPE}" \
