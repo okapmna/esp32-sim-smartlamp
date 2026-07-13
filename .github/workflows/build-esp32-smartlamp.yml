@@ -11,6 +11,11 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      deploy_ota:
+        description: 'Deploy to OTA server (dev version)'
+        type: boolean
+        default: false
 
 jobs:
   build:
@@ -88,8 +93,8 @@ jobs:
         run: |
           gh release upload "${{ github.event.release.tag_name }}" dist/* --clobber
 
-      - name: Deploy to OTA server (release only)
-        if: github.event_name == 'release'
+      - name: Deploy to OTA server (release or manual)
+        if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.deploy_ota)
         env:
           OTA_API_KEY: ${{ secrets.OTA_API_KEY }}
           OTA_UPLOAD_URL: ${{ secrets.OTA_UPLOAD_URL }}
