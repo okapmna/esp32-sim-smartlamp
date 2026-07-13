@@ -103,10 +103,11 @@ jobs:
             exit 0
           fi
           CHECKSUM=$(cat "$CHECKSUM_FILE")
-          curl -fsS -X POST "${OTA_UPLOAD_URL}?device_type=esp32-smartlamp" \
+          curl -fsSv -X POST "$OTA_UPLOAD_URL" \
                -F "firmware=@$FIRMWARE" \
                -F "version=${{ steps.version.outputs.version }}" \
+               -F "device_type=esp32-smartlamp" \
                -F "checksum=$CHECKSUM" \
                -F "uploaded_by=$UPLOADED_BY" \
                -F "source_repo=$SOURCE_REPO" \
-               -H "x-api-key: $OTA_API_KEY"
+               -H "X-Github-Token: $OTA_API_KEY"
