@@ -4,9 +4,10 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag to deploy (e.g. v2.0.7)'
+        description: 'Release tag (kosongkan untuk rilis terbaru)'
         type: string
-        required: true
+        required: false
+        default: ''
 
 jobs:
   deploy:
@@ -39,12 +40,29 @@ jobs:
             cp secret.h.example include/secret.h
           fi
 
+      - name: Resolve tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -n "${{ inputs.tag }}" ]; then
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            LATEST=$(gh release view --json tagName --jq .tagName 2>/dev/null || echo "")
+            if [ -z "$LATEST" ]; then
+              echo "::error::No release found"
+              exit 1
+            fi
+            echo "tag=$LATEST" >> "$GITHUB_OUTPUT"
+            echo "Using latest release: $LATEST"
+          fi
+
       - name: Download release assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p dist
-          gh release download "${{ inputs.tag }}" --dir dist
+          gh release download "${{ steps.tag.outputs.tag }}" --dir dist
 
       - name: Extract device type
         id: device
@@ -55,7 +73,7 @@ jobs:
       - name: Determine version
         id: version
         run: |
-          VERSION="${{ inputs.tag }}"
+          VERSION="${{ steps.tag.outputs.tag }}"
           VERSION="${VERSION#v}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
