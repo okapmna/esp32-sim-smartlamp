@@ -12,13 +12,8 @@ on:
     types: [published]
   workflow_dispatch:
     inputs:
-      version:
-        description: 'Version string (e.g. 2.0.7, beta-1). Leave empty for dev-<sha>'
-        type: string
-        default: ''
-        required: false
       deploy_ota:
-        description: 'Deploy to OTA server'
+        description: 'Deploy to OTA server (dev version)'
         type: boolean
         default: false
 
@@ -59,8 +54,6 @@ jobs:
           if [ "${{ github.event_name }}" = "release" ]; then
             VERSION="${{ github.event.release.tag_name }}"
             VERSION="${VERSION#v}"
-          elif [ -n "${{ inputs.version }}" ]; then
-            VERSION="${{ inputs.version }}"
           else
             VERSION="dev-${GITHUB_SHA::7}"
           fi
