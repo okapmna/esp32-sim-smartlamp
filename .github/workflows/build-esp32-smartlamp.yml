@@ -88,7 +88,7 @@ jobs:
         run: |
           gh release upload "${{ github.event.release.tag_name }}" dist/* --clobber
 
-      - name: Deploy to OTA server (release only)
+       - name: Deploy to OTA server (release only)
         if: github.event_name == 'release'
         env:
           OTA_API_KEY: ${{ secrets.OTA_API_KEY }}
@@ -96,6 +96,7 @@ jobs:
           UPLOADED_BY: ${{ github.actor }}
           SOURCE_REPO: ${{ github.server_url }}/${{ github.repository }}
         run: |
+          DEVICE_TYPE=$(grep -oP 'DEVICE_TYPE=\\"\K[^\\"]+' platformio.ini)
           FIRMWARE="dist/smartlamp-${{ steps.version.outputs.version }}.bin"
           CHECKSUM_FILE="dist/smartlamp-${{ steps.version.outputs.version }}.bin.sha256"
           if [ -z "$OTA_UPLOAD_URL" ] || [ -z "$OTA_API_KEY" ]; then
@@ -103,10 +104,10 @@ jobs:
             exit 0
           fi
           CHECKSUM=$(cat "$CHECKSUM_FILE")
-          curl -fsSv -X POST "${OTA_UPLOAD_URL}?device_type=esp32-smartlamp" \
+          curl -fsSv -X POST "${OTA_UPLOAD_URL}?device_type=${DEVICE_TYPE}" \
                -F "firmware=@$FIRMWARE" \
                -F "version=${{ steps.version.outputs.version }}" \
-               -F "device_type=esp32-smartlamp" \
+               -F "device_type=${DEVICE_TYPE}" \
                -F "checksum=$CHECKSUM" \
                -F "uploaded_by=$UPLOADED_BY" \
                -F "source_repo=$SOURCE_REPO" \
