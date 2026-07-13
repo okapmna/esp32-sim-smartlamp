@@ -1,0 +1,89 @@
+name: Deploy Release to OTA (Manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to deploy (e.g. v2.0.7)'
+        type: string
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install PlatformIO
+        run: pip install --no-cache-dir platformio
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio/.cache
+            ~/.platformio/packages
+            ~/.platformio/platforms
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+
+      - name: Prepare secret.h
+        run: |
+          if [ ! -f include/secret.h ]; then
+            cp secret.h.example include/secret.h
+          fi
+
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p dist
+          gh release download "${{ inputs.tag }}" --dir dist
+
+      - name: Extract device type
+        id: device
+        run: |
+          DEVICE_TYPE=$(grep -oP 'DEVICE_TYPE=\\"\K[^\\"]+' platformio.ini)
+          echo "type=$DEVICE_TYPE" >> "$GITHUB_OUTPUT"
+
+      - name: Determine version
+        id: version
+        run: |
+          VERSION="${{ inputs.tag }}"
+          VERSION="${VERSION#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Upload to OTA server
+        env:
+          OTA_API_KEY: ${{ secrets.OTA_API_KEY }}
+          OTA_UPLOAD_URL: ${{ secrets.OTA_UPLOAD_URL }}
+          DEVICE_TYPE: ${{ steps.device.outputs.type }}
+          VERSION: ${{ steps.version.outputs.version }}
+          UPLOADED_BY: ${{ github.actor }}
+          SOURCE_REPO: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          if [ -z "$OTA_UPLOAD_URL" ] || [ -z "$OTA_API_KEY" ]; then
+            echo "::warning::OTA_UPLOAD_URL or OTA_API_KEY not set, skipping"
+            exit 0
+          fi
+          for FILE in dist/*.bin; do
+            [ -f "$FILE" ] || continue
+            BASENAME=$(basename "$FILE" .bin)
+            echo "Uploading $BASENAME..."
+            CHECKSUM=$(sha256sum "$FILE" | cut -d' ' -f1)
+            curl -fsS -X POST "${OTA_UPLOAD_URL}?device_type=${DEVICE_TYPE}" \
+                 -F "firmware=@$FILE" \
+                 -F "version=${VERSION}" \
+                 -F "device_type=${DEVICE_TYPE}" \
+                 -F "checksum=$CHECKSUM" \
+                 -F "uploaded_by=$UPLOADED_BY" \
+                 -F "source_repo=$SOURCE_REPO" \
+                 -H "X-Github-Token: $OTA_API_KEY"
+            echo ""
+          done
